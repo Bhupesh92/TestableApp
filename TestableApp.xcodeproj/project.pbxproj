@@ -55,6 +55,13 @@
 			);
 			target = E51ACE582F1B7A2400B5E6E4 /* TestableAppUITests */;
 		};
+		E51ACEC52F1C7EA900B5E6E4 /* Exceptions for "TestableAppTests" folder in "TestableAppUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Extension/XCTestExtension.swift,
+			);
+			target = E51ACE582F1B7A2400B5E6E4 /* TestableAppUITests */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -70,6 +77,9 @@
 		};
 		E51ACE522F1B7A2400B5E6E4 /* TestableAppTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E51ACEC52F1C7EA900B5E6E4 /* Exceptions for "TestableAppTests" folder in "TestableAppUITests" target */,
+			);
 			path = TestableAppTests;
 			sourceTree = "<group>";
 		};
