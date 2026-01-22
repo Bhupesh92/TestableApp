@@ -11,8 +11,7 @@ This app is set up to demonstrate XCTestCase (unit & logic tests) and XCUITestCa
 - XCUITest (UI) — scenarios and best practices
 - Test organization and patterns
 - Running tests locally
-- CI/CD implementation (GitHub Actions)
-- Advanced topics & notes
+- CI/CD implementation (Jenkins/Fastlane)
 
 ---
 
@@ -56,37 +55,15 @@ Example scenarios (with suggested test names):
     - Act: decode
     - Assert: model fields match fixture
 
-- Persistence (UserDefaults, CoreData, File)
-  - test_UserDefaultsStore_savesAndRetrievesValue
-    - Arrange: in-memory user defaults or cleared sandbox
-    - Act: save value
-    - Assert: retrieved value equals saved
-
 - Input validation
   - test_EmailValidator_withInvalidEmail_returnsFalse
     - Arrange: invalid string
     - Act: validate
     - Assert: returns false
 
-- Edge cases & error handling
-  - test_FileLoader_whenFileMissing_throwsNotFoundError
-  - test_ConcurrentAccess_toSharedResource_remainsThreadSafe
-
-- Async / concurrency (Combine / async-await)
-  - test_AsyncFetcher_returnsDataWithinTimeout
-    - Use `XCTestExpectation` or `async` tests with `await`
-
 - Performance
   - test_Performance_ExpensiveOperation_runsUnder50ms
     - Use `measure` block
-
-- Snapshot testing (if used)
-  - test_LoginView_snapshot_matchesGolden
-    - Use third-party snapshot frameworks (e.g. iOSSnapshotTestCase, SnapshotTesting)
-
-Fixtures and test data:
-- Keep JSON fixtures under Tests/Fixtures
-- Use builder/factory helpers to create models for tests
 
 ---
 
@@ -97,55 +74,6 @@ General guidance:
 - Prefer accessibility identifiers (accessibilityIdentifier) for locating elements
 - Keep UI tests at the flow level — core logic belongs in unit tests
 - Use test-specific launch arguments/environment to stub network and use deterministic data
-
-Example scenarios (with suggested test names):
-
-- App Launch & Onboarding
-  - test_AppLaunch_showsWelcomeScreen
-    - Start app with onboarding not completed
-    - Assert welcome screen elements exist
-
-  - test_Onboarding_complete_proceedsToMainScreen
-
-- Login flow
-  - test_LoginFlow_withValidCredentials_entersMainScreen
-    - Launch with network stub that returns success
-    - Fill username/password and tap Sign In
-    - Assert main screen visible
-
-  - test_LoginFlow_withInvalidCredentials_showsErrorAlert
-
-- Navigation flows
-  - test_Navigation_openSettings_andBack
-    - Tap through tabs and ensure correct screens are displayed
-
-- Form input and validation
-  - test_ProfileForm_showsValidationErrorsForEmptyFields
-
-- Deep linking
-  - test_DeepLink_opensSpecificDetailScreen
-    - Launch the app with a deep link argument
-
-- Background/Foreground
-  - test_AppHandlesBackgroundAndForegroundWithoutLosingState
-
-- Orientation & Layout
-  - test_MainScreen_layoutStableOnRotation
-
-- Accessibility
-  - test_MainScreen_elements_haveAccessibilityLabels
-    - Ensure critical UI elements have accessibility identifiers and labels
-
-- Permissions and System Alerts
-  - test_PermissionsFlow_allowsUserToGrantLocation
-    - Use simulator permissions commands / launch arguments to pre-grant or deny as needed
-
-- Performance & Launch Time
-  - test_AppLaunch_performsUnderThreshold
-    - Measure launch time with `measure(metrics:)` where appropriate
-
-- Screenshot & Attachment
-  - Capture screenshots at important steps (useful as test artifacts in CI)
 
 UI Test tips:
 - Use `XCUIApplication().launchArguments` and `.launchEnvironment` to configure app for tests (mock servers, use in-memory DB)
@@ -203,143 +131,243 @@ Notes:
 
 ---
 
-## CI/CD Implementation (GitHub Actions)
+## CI/CD Implementation (Jenkins + Fastlane)
 
-This section provides an example GitHub Actions workflow to run unit and UI tests on macOS runners and upload test artifacts (xcresult and junit).
+🧱 STEP 0 — What You’ll Have at the End
 
-Create `.github/workflows/ci.yml` with content like:
+✔ Jenkins automatically builds your iOS app
+✔ Runs XCTest / XCUITest
+✔ Signs using Fastlane Match
+✔ Uploads to TestFlight
+✔ Triggered by GitHub push / PR
 
-```yaml
-name: CI
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+**🖥 STEP 1 — Set Up Jenkins on macOS
+**
 
-jobs:
-  build-and-test:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        xcode: [ "14.3" ] # adjust per needs; GitHub macOS runner chooses the latest matching Xcode
-        simulator: [ "iPhone 14" ]
-        os_version: [ "16.4" ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+brew install jenkins-lts
+brew services start jenkins-lts
 
-      - name: Set up Ruby (for xcpretty if needed)
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 3.x
 
-      - name: Install xcpretty
-        run: gem install xcpretty
+Open:
+http://localhost:8080
 
-      - name: Install dependencies (CocoaPods / Carthage / SwiftPM)
-        run: |
-          # Example for CocoaPods:
-          if [ -f Podfile ]; then
-            sudo gem install cocoapods
-            pod install --repo-update
-          fi
-          # Add other package managers as needed
+//
+If Safari can’t open http://localhost:8080 even after running:
+brew services start jenkins-lts
+this is a very common Jenkins-on-macOS issue. 
+Then
+brew services list
+ps aux | grep jenkins
+jenkins-lts 
 
-      - name: Boot simulator
-        run: |
-          xcrun simctl boot "${{ matrix.simulator }}"
-          xcrun simctl list
+//
 
-      - name: Run unit tests
-        run: |
-          xcodebuild test \
-            -workspace TestableApp.xcworkspace \
-            -scheme "TestableApp" \
-            -destination "platform=iOS Simulator,name=${{ matrix.simulator }},OS=${{ matrix.os_version }}" \
-            -resultBundlePath TestResults/UnitTests.xcresult | xcpretty -r junit --output TestResults/unit-junit.xml
-        continue-on-error: false
 
-      - name: Run UI tests
-        run: |
-          xcodebuild test \
-            -workspace TestableApp.xcworkspace \
-            -scheme "TestableAppUITests" \
-            -destination "platform=iOS Simulator,name=${{ matrix.simulator }},OS=${{ matrix.os_version }}" \
-            -resultBundlePath TestResults/UITests.xcresult | xcpretty -r junit --output TestResults/ui-junit.xml
-        continue-on-error: false
+//
 
-      - name: Upload xcresult (Unit)
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-xcresult
-          path: TestResults/UnitTests.xcresult
+**🔐 Reset Jenkins Username / Password (macOS)
+**
+brew services stop jenkins-lts
+nano ~/.jenkins/config.xml
+//
 
-      - name: Upload xcresult (UI)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-xcresult
-          path: TestResults/UITests.xcresult
 
-      - name: Upload junit reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-reports
-          path: TestResults/*.xml
-```
+**2️⃣ Install Required Jenkins Plugins
+**
+From Manage Jenkins → Plugins:
 
-Notes and best practices for CI:
-- Use macOS runners since iOS builds need Xcode.
-- Matrix testing helps cover multiple simulator types and OS versions — but be mindful of time/cost.
-- Use caching for dependencies (CocoaPods/SwiftPM) to speed up builds.
-- Upload `xcresult` bundles as artifacts so they can be inspected after failure.
-- Use `xcpretty` to produce junit XML for test reporting in CI.
-- Optionally, integrate with Codecov/test coverage uploading or a test-reporting GitHub app.
+✔ Git
+✔ Pipeline
+✔ GitHub Integration
+✔ Credentials Binding
+✔ Workspace Cleanup
 
-Code signing for shipping/adhoc builds:
-- For running unit and UI tests on simulator, code signing is typically not required.
-- If you need to run on physical devices or archive, store certificates and provisioning profiles as GitHub Secrets and use actions like `apple-actions/import-codesign-certs` to install them securely.
+**🍎 STEP 2 — Install iOS Dependencies on Jenkins Mac
+**
+# Xcode
 
-Fastlane integration (optional):
-- Use Fastlane lanes to standardize build + test + upload steps.
-- Example lane in `Fastfile`:
-```ruby
-lane :ci_tests do
-  run_tests(
-    workspace: "TestableApp.xcworkspace",
-    scheme: "TestableApp",
-    devices: ["iPhone 14"],
-    output_directory: "fastlane/test_output",
-    output_types: "junit",
-  )
+xcode-select --install
+
+
+# Ruby & Bundler
+sudo gem install bundler fastlane
+
+# CocoaPods (if used)
+
+sudo gem install cocoapods
+
+Verify:
+fastlane —version
+
+//
+**🔹 Step 2: Install Fastlane via Bundler (BEST PRACTICE)
+**
+cd your-ios-project
+nano Gemfile
+Paste:
+
+source "https://rubygems.org"
+
+gem “fastlane"
+
+gem install bundler
+bundle install
+//
+
+xcodebuild -version
+
+**📂 STEP 3 — Prepare iOS Project
+**
+Create Gemfile:
+and paste
+source "https://rubygems.org"
+gem "fastlane"
+gem “cocoapods"
+
+
+bundle install
+bundle exec fastlane init
+Manual setup
+app_identifier("Bhupesh.TestableApp")
+
+apple_id("*****@gmail.com")
+
+team_id("*******")
+
+**Paste to fastfile:
+**
+default_platform(:ios)
+
+platform :ios do
+
+  before_all do
+    setup_ci
+  end
+
+  desc "Run unit and UI tests"
+  lane :tests do
+    scan(
+      scheme: "MyApp",
+      clean: true,
+      devices: ["iPhone 15"]
+    )
+  end
+
+  desc "Build app"
+  lane :build do
+    build_app(
+      scheme: "MyApp",
+      export_method: "app-store"
+    )
+  end
+
+  desc "Upload to TestFlight"
+  lane :beta do
+    match(type: "appstore")
+    increment_build_number
+    build_app(scheme: "MyApp")
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
 end
-```
 
----
+**🔐 STEP 5 — Code Signing Using Match (CRITICAL)
+**
 
-## Test Reporting & Flaky Tests
+bundle exec fastlane match init
 
-- Mark flaky tests as skipped or add retries only after investigating root cause.
-- Capture logs, screen recordings, and screenshots from UI tests and upload as CI artifacts.
-- Use `xcodebuild`'s `-resultBundlePath` to produce `.xcresult`, which can be opened locally with Xcode for detailed failure information.
-- Consider integrating test analytics or flakiness tracking to prioritize fixes.
+and choose git
+Create private repo for certificates.
 
----
+Jenkins Needs Access to Match Repo
 
-## Advanced Topics
+✔ Add SSH key
+✔ Store repo password in Jenkins credentials
 
-- Headless simulators and parallel test execution using multiple simulators (requires additional orchestration)
-- Running tests on real devices via services (e.g., Bitrise, BrowserStack, Firebase Test Lab—note: these services may require additional config)
-- Using test-specific mocks and local servers to emulate network conditions (latency, errors)
-- Security: never commit secrets (certs, profiles, API keys); use GitHub Secrets
 
----
+ On the first run for each environment it will create the provisioning profiles and
+[23:34:16]: certificates for you. From then on, it will automatically import the existing profiles.
 
-## Summary
+**STEP 6 — App Store Connect API Key (Recommended)
+**
 
-This repository is configured to demonstrate:
-- Clear XCTest and XCUITest scenarios
-- Best practices for organizing tests and test doubles
-- A reproducible CI workflow using GitHub Actions that runs unit and UI tests on macOS runners, uploads xcresult bundles, and provides junit reports
+Create API key in App Store Connect.
 
+Store these in Jenkins Credentials:
+
+Key	Type
+ASC_KEY_ID	Secret Text
+ASC_ISSUER_ID	Secret Text
+ASC_KEY_CONTENT	Secret File
+STEP 7 — Verify Locally
+
+Run:
+
+bundle exec fastlane tests // It worked 
+bundle exec fastlane beta // Check the process of match repo aand how to store
+
+STEP 8 — Create Jenkinsfile (MOST IMPORTANT)
+Create Jenkinsfile at repo root:
+
+pipeline {
+    agent any
+
+    environment {
+        LANG = "en_US.UTF-8"
+        LC_ALL = "en_US.UTF-8"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                  bundle install
+                  pod install
+                '''
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh 'bundle exec fastlane tests'
+            }
+        }
+
+        stage('Build & Upload') {
+            steps {
+                sh 'bundle exec fastlane beta'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build uploaded to TestFlight"
+        }
+        failure {
+            echo "❌ Build failed"
+        }
+    }
+}
+
+🔗 STEP 9 — Create Jenkins Pipeline Job
+
+
+1️⃣ New Item → Pipeline
+2️⃣ Choose Pipeline from SCM
+3️⃣ Select Git
+4️⃣ Add repo URL + credentials
+5️⃣ Jenkinsfile path:
+
+🔁 STEP 10 — GitHub Webhook Trigger
+
+GitHub repo → Settings → Webhooks
